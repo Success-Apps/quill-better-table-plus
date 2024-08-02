@@ -400,7 +400,6 @@ class TableContainer extends Container {
       //    2. 不全是 % 结尾
       colGroup.children.reduce((_, col) => {
         const colWidthRate = (col.domNode.clientWidth / tableWidth * 100).toFixed(2)
-        console.log(colWidthRate + "%")
         col.formats(colWidthRate + "%")
         return null
       })
