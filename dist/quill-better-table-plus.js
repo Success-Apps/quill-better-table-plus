@@ -73,7 +73,7 @@ return /******/ (function(modules) { // webpackBootstrap
 /******/
 /******/ 	var hotApplyOnUpdate = true;
 /******/ 	// eslint-disable-next-line no-unused-vars
-/******/ 	var hotCurrentHash = "16c14c14290922e20df7";
+/******/ 	var hotCurrentHash = "3c6aeb2dfd8656d901b7";
 /******/ 	var hotRequestTimeout = 10000;
 /******/ 	var hotCurrentModuleData = {};
 /******/ 	var hotCurrentChildModule;
@@ -1085,7 +1085,7 @@ class table_column_tool_TableColumnTool {
     let existCells = Array.from(this.domNode.querySelectorAll('.qlbt-col-tool-cell'));
     for (let index = 0; index < Math.max(cellsNumber, existCells.length); index++) {
       let col = tableCols.at(index);
-      let colWidth = col && parseInt(col.formats()[col.statics.blotName].width, 10);
+      let colWidth = col && col.attributes.domNode.clientWidth;
       // if cell already exist
       let toolCell = null;
       if (!existCells[index]) {
@@ -1142,10 +1142,17 @@ class table_column_tool_TableColumnTool {
       const existCells = Array.from(this.domNode.querySelectorAll('.qlbt-col-tool-cell'));
       const colIndex = existCells.indexOf(cell);
       const colBlot = tableContainer.colGroup().children.at(colIndex);
+      const nextColBlot = colBlot.next;
+      const nextCell = nextColBlot.domNode;
+      const nextCellWidth = nextCell.clientWidth;
       if (dragging) {
         colBlot.format('width', width0 + delta);
+        nextColBlot.format('width', nextCellWidth - delta);
         css(cell, {
           'min-width': `${width0 + delta}px`
+        });
+        css(nextCell, {
+          'min-width': `${nextCellWidth - delta}px`
         });
         x0 = 0;
         x = 0;
@@ -1163,6 +1170,7 @@ class table_column_tool_TableColumnTool {
       tableContainer.updateTableWidth();
       const tableSelection = this.quill.getModule('better-table-plus').tableSelection;
       tableSelection && tableSelection.clearSelection();
+      this.updateToolCells();
     };
     const handleMousedown = e => {
       document.addEventListener('mousemove', handleDrag, false);
@@ -1585,6 +1593,13 @@ class TableCol extends table_Block {
       return formats;
     }, {});
   }
+  formats(value) {
+    const superFormats = super.formats();
+    if (value) {
+      this.domNode.setAttribute("width", value);
+    }
+    return superFormats;
+  }
   format(name, value) {
     if (COL_ATTRIBUTES.indexOf(name) > -1) {
       this.domNode.setAttribute(`${name}`, value || COL_DEFAULT[name]);
@@ -1603,8 +1618,7 @@ TableColGroup.blotName = "table-col-group";
 TableColGroup.tagName = "colgroup";
 class table_TableContainer extends Container {
   static create() {
-    let node = super.create();
-    return node;
+    return super.create();
   }
   constructor(scroll, domNode) {
     super(scroll, domNode);
@@ -1614,11 +1628,17 @@ class table_TableContainer extends Container {
     setTimeout(() => {
       const colGroup = this.colGroup();
       if (!colGroup) return;
-      const tableWidth = colGroup.children.reduce((sumWidth, col) => {
-        sumWidth = sumWidth + parseInt(col.formats()[TableCol.blotName].width, 10);
-        return sumWidth;
-      }, 0);
-      this.domNode.style.width = `${tableWidth}px`;
+      const tableWidth = this.domNode.clientWidth;
+
+      // 需要进行 100% 宽度格式化的场景
+      //    1. 全部列宽度都是非 % 结尾
+      //    2. 不全是 % 结尾
+      colGroup.children.reduce((_, col) => {
+        const colWidthRate = (col.domNode.clientWidth / tableWidth * 100).toFixed(2);
+        col.formats(colWidthRate + "%");
+        return null;
+      });
+      this.domNode.style.width = `100%`;
     }, 0);
   }
   cells(column) {
@@ -2740,7 +2760,7 @@ function matchTable(node, delta, scroll) {
 
 const Module = external_commonjs_quill_commonjs2_quill_amd_quill_root_Quill_default.a.import('core/module');
 const quill_better_table_plus_Delta = external_commonjs_quill_commonjs2_quill_amd_quill_root_Quill_default.a.import('delta');
-class quill_better_table_plus_BetterTable extends Module {
+class quill_better_table_plus_BetterTablePlus extends Module {
   static register() {
     external_commonjs_quill_commonjs2_quill_amd_quill_root_Quill_default.a.register(TableCol, true);
     external_commonjs_quill_commonjs2_quill_amd_quill_root_Quill_default.a.register(TableColGroup, true);
@@ -2750,11 +2770,9 @@ class quill_better_table_plus_BetterTable extends Module {
     external_commonjs_quill_commonjs2_quill_amd_quill_root_Quill_default.a.register(TableBody, true);
     external_commonjs_quill_commonjs2_quill_amd_quill_root_Quill_default.a.register(table_TableContainer, true);
     external_commonjs_quill_commonjs2_quill_amd_quill_root_Quill_default.a.register(table_TableViewWrapper, true);
-    external_commonjs_quill_commonjs2_quill_amd_quill_root_Quill_default.a.register(table_TableViewWrapper, true);
     // register customized Header，overwriting quill built-in Header
     // Quill.register('formats/header', Header, true);
   }
-
   constructor(quill, options) {
     super(quill, options);
 
@@ -2861,12 +2879,12 @@ class quill_better_table_plus_BetterTable extends Module {
     const range = this.quill.getSelection(true);
     if (range == null) return;
     let currentBlot = this.quill.getLeaf(range.index)[0];
-    let delta = new quill_better_table_plus_Delta().retain(range.index);
     if (isInTableCell(currentBlot)) {
       // eslint-disable-next-line no-console
       console.warn(`Can not insert table into a table cell.`);
       return;
     }
+    let delta = new quill_better_table_plus_Delta().retain(range.index);
     delta.insert('\n');
     // insert table column
     delta = new Array(columns).fill('\n').reduce((memo, text) => {
@@ -2966,7 +2984,7 @@ class quill_better_table_plus_BetterTable extends Module {
     this.table = null;
   }
 }
-quill_better_table_plus_BetterTable.keyboardBindings = {
+quill_better_table_plus_BetterTablePlus.keyboardBindings = {
   'table-cell-line backspace': {
     key: 'Backspace',
     format: ['table-cell-line'],
@@ -2995,7 +3013,6 @@ quill_better_table_plus_BetterTable.keyboardBindings = {
       if (range.length > 0) {
         this.quill.scroll.deleteAt(range.index, range.length); // So we do not trigger text-change
       }
-
       const lineFormats = Object.keys(context.format).reduce((formats, format) => {
         if (this.quill.scroll.query(format, Scope.BLOCK) && !Array.isArray(context.format[format])) {
           formats[format] = context.format[format];
@@ -3097,7 +3114,7 @@ function isTableCell(blot) {
 function isInTableCell(current) {
   return current && current.parent ? isTableCell(current.parent) ? true : isInTableCell(current.parent) : false;
 }
-/* harmony default export */ var quill_better_table_plus = __webpack_exports__["default"] = (quill_better_table_plus_BetterTable);
+/* harmony default export */ var quill_better_table_plus = __webpack_exports__["default"] = (quill_better_table_plus_BetterTablePlus);
 
 /***/ }),
 /* 11 */,
